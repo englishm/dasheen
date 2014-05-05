@@ -1,10 +1,12 @@
 package main
 
 import (
-    "github.com/hoisie/web"
     "fmt"
     "flag"
     "os"
+    "log"
+    "net/http"
+    "github.com/gorilla/websocket"
     mqtt "git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git"
 )
 
@@ -12,6 +14,8 @@ var (
   upstairs = "unknown"
   downstairs = "unknown"
 )
+
+var connections map[*websocket.Conn]bool
 
 func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
   fmt.Printf("Received message on topic: %s\n", message.Topic())
@@ -26,9 +30,45 @@ func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
   }
   fmt.Printf("upstairs: %s\n", upstairs)
   fmt.Printf("downstairs: %s\n", downstairs)
+  wsMessageString := "upstairs: " + upstairs + "; downstairs: " + downstairs
+  wsMessage := []byte(wsMessageString)
+  sendAll(wsMessage)
 }
 
-func setup() {
+func sendAll(msg []byte) {
+  for conn := range connections {
+    if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+      delete(connections, conn)
+      conn.Close()
+    }
+  }
+}
+
+func wsHandler(w http.ResponseWriter, r *http.Request) {
+  conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+  if _, ok := err.(websocket.HandshakeError); ok {
+    http.Error(w, "Not a websocket handshake", 400)
+    return
+  } else if err != nil {
+    log.Println(err)
+    return
+  }
+  log.Println("Successfully upgraded connection")
+  connections[conn] = true
+
+  for {
+    _, msg, err := conn.ReadMessage()
+    if err != nil {
+      delete(connections, conn)
+      conn.Close()
+      return
+    }
+    log.Println(string(msg))
+    sendAll(msg)
+  }
+}
+
+func mqttSetup() {
   broker := flag.String("broker", "tcp://10.138.123.180:1883", "MQTT broker")
   clientid := flag.String("clientid", "dasheen", "Clientid")
   topic := flag.String("topic", "callaloo/#", "Topic name")
@@ -51,13 +91,22 @@ func setup() {
 
 }
 
-func hello(val string) string { 
-  return "Hello, " + val + ".<br/>\n<br/>\n upstairs: " + upstairs + "<br/>\n downstairs: " + downstairs
+func hello(w http.ResponseWriter, r *http.Request) { 
+  fmt.Fprintf(w, "Hello.\n upstairs: " + upstairs + "\n downstairs: " + downstairs)
 }
 
 func main() {
-    setup()
-    web.Get("/(.*)", hello)
-    web.Run("0.0.0.0:9999")
+  mqttSetup()
+  dir := flag.String("directory", "web/", "directory of web files")
+  flag.Parse()
+  connections = make(map[*websocket.Conn]bool)
+  fs := http.Dir(*dir)
+  fileHandler := http.FileServer(fs)
+  http.Handle("/", fileHandler)
+  http.HandleFunc("/hello",hello)
+  http.HandleFunc("/ws", wsHandler)
+  http.ListenAndServe("127.0.0.1:80", nil)
+  // web.Get("/(.*)", hello)
+  // web.Run("0.0.0.0:9999")
 }
 
