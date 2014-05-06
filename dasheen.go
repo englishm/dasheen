@@ -105,7 +105,7 @@ func main() {
   http.Handle("/", fileHandler)
   http.HandleFunc("/hello",hello)
   http.HandleFunc("/ws", wsHandler)
-  http.ListenAndServe("127.0.0.1:80", nil)
+  http.ListenAndServe("0.0.0.0:80", nil)
   // web.Get("/(.*)", hello)
   // web.Run("0.0.0.0:9999")
 }

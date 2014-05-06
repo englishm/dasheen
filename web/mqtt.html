@@ -1,75 +1,171 @@
-<html ng-app="chat">
+<html ng-app="dasheen">
 <head>
-	<title>Tutorial</title>
-	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.2/css/bootstrap.min.css">
-	<link rel="stylesheet" href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css">
-	<style>
-	#chat {
-			height: 300px;
-			overflow: scroll;
-	}
-	</style>
+  <title>Dasheen</title>
+  <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <style id="holderjs-style" type="text/css"></style>
+  <style>
+    #log {
+      height: 200px;
+      overflow: scroll;
+    }
+  </style>
 </head>
 <body ng-controller="MainCtl">
-	<div class="jumbotron">
-		<h1>My Chat</h1>
-	</div>
-	<div id="chat">
-		<ul>
-			<li ng-repeat="m in messages track by $index">{{m}}</li>
-		</ul>
-	</div>
-	<input type="text" placeholder="type here" ng-model="msg" ng-enter="send()">
-	<button class="btn btn-primary" ng-click="send()">Send</button>
+  <div role="navigation" class="navbar navbar-inverse navbar-fixed-top">
+    <div class="container-fluid">
+      <div class="navbar-header">
+        <button data-target=".navbar-collapse" data-toggle="collapse" class="navbar-toggle" type="button">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a href="#" class="navbar-brand">Dasheen</a>
+      </div>
+    </div>
+  </div>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-sm-3 col-md-2 sidebar">
+        <ul class="nav nav-sidebar">
+          <li class="active"><a href="#">Overview</a></li>
+          <li><a href="#">Reports</a></li>
+          <li><a href="#">Analytics</a></li>
+          <li><a href="#">Export</a></li>
+        </ul>
+      </div>
+      <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+        <h1 class="page-header">Dasheen</h1>
+        <div class="row placeholders">
 
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <svg height="200" width="200">
+              <circle cx="100" cy="100" r="90" stroke="black" stroke-width="3" ng-attr-fill="{{upstairsColor}}" />
+            </svg>
+            <h4>Upstairs Status</h4>
+            <span class="text-muted" ng-bind="upstairsText"></span>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <div id="log">
+              <ul>
+                <li ng-repeat="m in messages track by $index">{{m}}</li>
+              </ul>
+            </div>
+            <h4>Label</h4>
+            <span class="text-muted">Something else</span>
+            <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()">
+            <button class="btn btn-primary" ng-click="send()">Send</button>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <img data-src="holder.js/200x200/auto/sky">
+            <h4>Label</h4>
+            <span class="text-muted">Something else</span>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <img data-src="holder.js/200x200/auto/vine">
+            <h4>Label</h4>
+            <span class="text-muted">Something else</span>
+          </div>
+
+        </div>
+
+        <div class="row placeholders">
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <svg height="200" width="200">
+              <circle cx="100" cy="100" r="90" stroke="black" stroke-width="3" ng-attr-fill="{{downstairsColor}}" />
+            </svg>
+            <h4>Downstairs Status</h4>
+            <span class="text-muted" ng-bind="downstairsText"></span>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <div id="log">
+              <ul>
+                <li ng-repeat="m in messages track by $index">{{m}}</li>
+              </ul>
+            </div>
+            <h4>Label</h4>
+            <span class="text-muted">Something else</span>
+            <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()">
+            <button class="btn btn-primary" ng-click="send()">Send</button>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <img alt="200x200" class="img-responsive" data-src="holder.js/200x200/auto/sky" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzBEOEZEQiIvPjx0ZXh0IHRleHQtYW5jaG9yPSJtaWRkbGUiIHg9IjEwMCIgeT0iMTAwIiBzdHlsZT0iZmlsbDojZmZmO2ZvbnQtd2VpZ2h0OmJvbGQ7Zm9udC1zaXplOjEzcHg7Zm9udC1mYW1pbHk6QXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWY7ZG9taW5hbnQtYmFzZWxpbmU6Y2VudHJhbCI+MjAweDIwMDwvdGV4dD48L3N2Zz4=">
+            <h4>Label</h4>
+            <span class="text-muted">Something else</span>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <img alt="200x200" class="img-responsive" data-src="holder.js/200x200/auto/vine" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzM5REJBQyIvPjx0ZXh0IHRleHQtYW5jaG9yPSJtaWRkbGUiIHg9IjEwMCIgeT0iMTAwIiBzdHlsZT0iZmlsbDojMUUyOTJDO2ZvbnQtd2VpZ2h0OmJvbGQ7Zm9udC1zaXplOjEzcHg7Zm9udC1mYW1pbHk6QXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWY7ZG9taW5hbnQtYmFzZWxpbmU6Y2VudHJhbCI+MjAweDIwMDwvdGV4dD48L3N2Zz4=">
+            <h4>Label</h4>
+            <span class="text-muted">Something else</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://raw.githubusercontent.com/imsky/holder/master/holder.js"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.3/angular.min.js"></script>
 <script>
-	var app = angular.module("chat", []);
+  var app = angular.module("dasheen", []);
 
-	app.directive('ngEnter', function () {
-		return function (scope, element, attrs) {
-			element.bind("keydown keypress", function (event) {
-				if(event.which === 13) {
-					scope.$apply(function (){
-						scope.$eval(attrs.ngEnter);
-					});
+  app.directive('ngEnter', function () {
+    return function (scope, element, attrs) {
+      element.bind("keydown keypress", function (event) {
+        if(event.which === 13) {
+          scope.$apply(function (){
+            scope.$eval(attrs.ngEnter);
+          });
 
-					event.preventDefault();
-				}
-			});
-		};
-	});
+          event.preventDefault();
+        }
+      });
+    };
+  });
 
-	app.controller("MainCtl", ["$scope", function($scope) {
-		$scope.messages = [];
+  app.controller("MainCtl", ["$scope", function($scope) {
+    $scope.messages = [];
+    $scope.upstairsColor = "yellow";
+    $scope.upstairsText = "unknown";
+    $scope.downstairsColor = "yellow";
+    $scope.downstairsText = "unknown";
 
-		var conn = new WebSocket("ws://localhost/ws");
-		// called when the server closes the connection
-		conn.onclose = function(e) {
-			$scope.$apply(function(){
-				$scope.messages.push("DISCONNECTED");
-			});
-		};
+    var conn = new WebSocket("ws://localhost/ws");
+    // called when the server closes the connection
+    conn.onclose = function(e) {
+      $scope.$apply(function(){
+        $scope.messages.push("DISCONNECTED");
+      });
+    };
 
-		// called when the connection to the server is made
-		conn.onopen = function(e) {
-			$scope.$apply(function(){
-				$scope.messages.push("CONNECTED");
-			})
-		};
+    // called when the connection to the server is made
+    conn.onopen = function(e) {
+      $scope.$apply(function(){
+        $scope.messages.push("CONNECTED");
+      })
+    };
 
-		// called when a message is received from the server
-		conn.onmessage = function(e){
-			$scope.$apply(function(){
-				$scope.messages.push(e.data);
-			});
-		};
+    // called when a message is received from the server
+    conn.onmessage = function(e){
+      $scope.$apply(function(){
+        $scope.messages.push(e.data);
+      });
+    };
 
-		$scope.send = function() {
-			conn.send($scope.msg);
-			$scope.msg = "";
-		}
-	}]);
+    $scope.send = function() {
+      conn.send($scope.msg);
+      $scope.msg = "";
+    }
+  }]);
 </script>
 </body>
 </html>
