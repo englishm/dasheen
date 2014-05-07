@@ -6,14 +6,20 @@ import (
     "os"
     "log"
     "net/http"
+    "encoding/json"
     "github.com/gorilla/websocket"
     mqtt "git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git"
 )
 
-var (
-  upstairs = "unknown"
-  downstairs = "unknown"
-)
+type BathroomStatus struct {
+  Upstairs string
+  Downstairs string
+}
+
+var status = BathroomStatus{
+  Upstairs: "unknown",
+  Downstairs: "unknown",
+}
 
 var connections map[*websocket.Conn]bool
 
@@ -23,15 +29,20 @@ func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
   msg := string(message.Payload())
   fmt.Printf("Message: %s\n", message.Payload())
   if t == "callaloo/upstairs" {
-    upstairs = msg
+    status.Upstairs = msg
   }
   if t == "callaloo/downstairs" {
-    downstairs = msg
+    status.Downstairs = msg
   }
-  fmt.Printf("upstairs: %s\n", upstairs)
-  fmt.Printf("downstairs: %s\n", downstairs)
-  wsMessageString := "upstairs: " + upstairs + "; downstairs: " + downstairs
-  wsMessage := []byte(wsMessageString)
+  fmt.Printf("upstairs: %s\n", status.Upstairs)
+  fmt.Printf("downstairs: %s\n", status.Downstairs)
+  jsonStatus, err := json.Marshal(status)
+  if err != nil {
+    fmt.Println("error:", err)
+  }
+  os.Stdout.Write(jsonStatus)
+
+  wsMessage := []byte(jsonStatus)
   sendAll(wsMessage)
 }
 
@@ -92,7 +103,7 @@ func mqttSetup() {
 }
 
 func hello(w http.ResponseWriter, r *http.Request) { 
-  fmt.Fprintf(w, "Hello.\n upstairs: " + upstairs + "\n downstairs: " + downstairs)
+  fmt.Fprintf(w, "Hello.\n upstairs: " + status.Upstairs + "\n downstairs: " + status.Downstairs)
 }
 
 func main() {

@@ -49,27 +49,12 @@
           </div>
 
           <div class="col-xs-6 col-sm-3 placeholder">
+            <h4>Changes</h4>
             <div id="log">
               <ul>
-                <li ng-repeat="m in messages track by $index">{{m}}</li>
+                <li ng-repeat="m in upstairsMessages track by $index">{{m}}</li>
               </ul>
             </div>
-            <h4>Label</h4>
-            <span class="text-muted">Something else</span>
-            <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()">
-            <button class="btn btn-primary" ng-click="send()">Send</button>
-          </div>
-
-          <div class="col-xs-6 col-sm-3 placeholder">
-            <img data-src="holder.js/200x200/auto/sky">
-            <h4>Label</h4>
-            <span class="text-muted">Something else</span>
-          </div>
-
-          <div class="col-xs-6 col-sm-3 placeholder">
-            <img data-src="holder.js/200x200/auto/vine">
-            <h4>Label</h4>
-            <span class="text-muted">Something else</span>
           </div>
 
         </div>
@@ -85,27 +70,15 @@
           </div>
 
           <div class="col-xs-6 col-sm-3 placeholder">
+            <h4>Changes</h4>
             <div id="log">
               <ul>
-                <li ng-repeat="m in messages track by $index">{{m}}</li>
+                <li ng-repeat="m in downstairsMessages track by $index">{{m}}</li>
               </ul>
             </div>
-            <h4>Label</h4>
-            <span class="text-muted">Something else</span>
-            <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()">
-            <button class="btn btn-primary" ng-click="send()">Send</button>
-          </div>
-
-          <div class="col-xs-6 col-sm-3 placeholder">
-            <img alt="200x200" class="img-responsive" data-src="holder.js/200x200/auto/sky" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzBEOEZEQiIvPjx0ZXh0IHRleHQtYW5jaG9yPSJtaWRkbGUiIHg9IjEwMCIgeT0iMTAwIiBzdHlsZT0iZmlsbDojZmZmO2ZvbnQtd2VpZ2h0OmJvbGQ7Zm9udC1zaXplOjEzcHg7Zm9udC1mYW1pbHk6QXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWY7ZG9taW5hbnQtYmFzZWxpbmU6Y2VudHJhbCI+MjAweDIwMDwvdGV4dD48L3N2Zz4=">
-            <h4>Label</h4>
-            <span class="text-muted">Something else</span>
-          </div>
-
-          <div class="col-xs-6 col-sm-3 placeholder">
-            <img alt="200x200" class="img-responsive" data-src="holder.js/200x200/auto/vine" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzM5REJBQyIvPjx0ZXh0IHRleHQtYW5jaG9yPSJtaWRkbGUiIHg9IjEwMCIgeT0iMTAwIiBzdHlsZT0iZmlsbDojMUUyOTJDO2ZvbnQtd2VpZ2h0OmJvbGQ7Zm9udC1zaXplOjEzcHg7Zm9udC1mYW1pbHk6QXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWY7ZG9taW5hbnQtYmFzZWxpbmU6Y2VudHJhbCI+MjAweDIwMDwvdGV4dD48L3N2Zz4=">
-            <h4>Label</h4>
-            <span class="text-muted">Something else</span>
+            <!-- <span class="text-muted">Something else</span> -->
+            <!-- <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()"> -->
+            <!-- <button class="btn btn-primary" ng-click="send()">Send</button> -->
           </div>
 
         </div>
@@ -133,7 +106,9 @@
   });
 
   app.controller("MainCtl", ["$scope", function($scope) {
-    $scope.messages = [];
+    $scope.generalMessages = [];
+    $scope.upstairsMessages = [];
+    $scope.downstairsMessages = [];
     $scope.upstairsColor = "yellow";
     $scope.upstairsText = "unknown";
     $scope.downstairsColor = "yellow";
@@ -143,21 +118,54 @@
     // called when the server closes the connection
     conn.onclose = function(e) {
       $scope.$apply(function(){
-        $scope.messages.push("DISCONNECTED");
+        $scope.generalMessages.push("DISCONNECTED");
       });
     };
 
     // called when the connection to the server is made
     conn.onopen = function(e) {
       $scope.$apply(function(){
-        $scope.messages.push("CONNECTED");
+        $scope.generalMessages.push("CONNECTED");
       })
     };
 
     // called when a message is received from the server
     conn.onmessage = function(e){
       $scope.$apply(function(){
-        $scope.messages.push(e.data);
+        // console.log(e.data)
+        now = new Date();
+        timestamp = now.toLocaleString();
+        var status = angular.fromJson(e.data);
+        if(status.Upstairs != $scope.upstairsText){
+          $scope.upstairsMessages.push(timestamp + " : " + $scope.upstairsText + " -> " + status.Upstairs);
+          $scope.upstairsText = status.Upstairs;
+          switch($scope.upstairsText) {
+            case "open":
+              $scope.upstairsColor = "green";
+              break;
+            case "closed":
+              $scope.upstairsColor = "red";
+              break;
+            default:
+              $scope.upstairsColor = "yellow";
+          }
+        }
+        if(status.Downstairs != $scope.downstairsText){
+          $scope.downstairsMessages.push(timestamp + " : " + $scope.downstairsText + " -> " + status.Downstairs);
+          $scope.downstairsText = status.Downstairs;
+          switch($scope.downstairsText) {
+            case "open":
+              $scope.downstairsColor = "green";
+              break;
+            case "closed":
+              $scope.downstairsColor = "red";
+              break;
+            default:
+              $scope.downstairsColor = "yellow";
+          }
+        }
+        // console.log(status);
+        // $scope.messages.push(e.data);
       });
     };
 
