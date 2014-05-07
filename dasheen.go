@@ -103,7 +103,11 @@ func mqttSetup() {
 }
 
 func hello(w http.ResponseWriter, r *http.Request) { 
-  fmt.Fprintf(w, "Hello.\n upstairs: " + status.Upstairs + "\n downstairs: " + status.Downstairs)
+  jsonStatus, err := json.Marshal(status)
+  if err != nil {
+    fmt.Println("error:", err)
+  }
+  fmt.Fprintf(w, jsonStatus)
 }
 
 func main() {
@@ -114,7 +118,7 @@ func main() {
   fs := http.Dir(*dir)
   fileHandler := http.FileServer(fs)
   http.Handle("/", fileHandler)
-  http.HandleFunc("/hello",hello)
+  http.HandleFunc("/status.json",hello)
   http.HandleFunc("/ws", wsHandler)
   http.ListenAndServe("0.0.0.0:80", nil)
   // web.Get("/(.*)", hello)
