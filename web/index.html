@@ -114,7 +114,9 @@
     $scope.downstairsColor = "yellow";
     $scope.downstairsText = "unknown";
 
-    var conn = new WebSocket("ws://localhost/ws");
+    host = document.location.host;
+
+    var conn = new WebSocket("ws://"+ host +"/ws");
     // called when the server closes the connection
     conn.onclose = function(e) {
       $scope.$apply(function(){
