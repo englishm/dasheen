@@ -24,23 +24,19 @@ var status = BathroomStatus{
 var connections map[*websocket.Conn]bool
 
 func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
-  fmt.Printf("Received message on topic: %s\n", message.Topic())
   t := string(message.Topic())
   msg := string(message.Payload())
-  fmt.Printf("Message: %s\n", message.Payload())
+  fmt.Println(t + " " + msg)
   if t == "callaloo/upstairs" {
     status.Upstairs = msg
   }
   if t == "callaloo/downstairs" {
     status.Downstairs = msg
   }
-  fmt.Printf("upstairs: %s\n", status.Upstairs)
-  fmt.Printf("downstairs: %s\n", status.Downstairs)
   jsonStatus, err := json.Marshal(status)
   if err != nil {
     fmt.Println("error:", err)
   }
-  os.Stdout.Write(jsonStatus)
 
   wsMessage := []byte(jsonStatus)
   sendAll(wsMessage)
@@ -107,7 +103,7 @@ func hello(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     fmt.Println("error:", err)
   }
-  fmt.Fprintf(w, jsonStatus)
+  fmt.Fprintf(w, string(jsonStatus))
 }
 
 func main() {
