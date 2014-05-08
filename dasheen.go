@@ -1,9 +1,7 @@
 package main
 
 import (
-    "fmt"
     "flag"
-    "os"
     "log"
     "net/http"
     "encoding/json"
@@ -11,12 +9,12 @@ import (
     mqtt "git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git"
 )
 
-type BathroomStatus struct {
+type bathroomStatus struct {
   Upstairs string
   Downstairs string
 }
 
-var status = BathroomStatus{
+var status = bathroomStatus{
   Upstairs: "unknown",
   Downstairs: "unknown",
 }
@@ -26,7 +24,7 @@ var connections map[*websocket.Conn]bool
 func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
   t := string(message.Topic())
   msg := string(message.Payload())
-  fmt.Println(t + " " + msg)
+  log.Println(t + " " + msg)
   if t == "callaloo/upstairs" {
     status.Upstairs = msg
   }
@@ -35,7 +33,7 @@ func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
   }
   jsonStatus, err := json.Marshal(status)
   if err != nil {
-    fmt.Println("error:", err)
+    log.Println("error:", err)
   }
 
   wsMessage := []byte(jsonStatus)
@@ -75,49 +73,62 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
   }
 }
 
-func mqttSetup() {
-  broker := flag.String("broker", "tcp://10.138.123.180:1883", "MQTT broker")
-  clientid := flag.String("clientid", "dasheen", "Clientid")
-  topic := flag.String("topic", "callaloo/#", "Topic name")
-  qos := flag.Int("qos", 1, "QoS")
-  flag.Parse()
+func mqttSetup(broker *string, clientid *string, topic *string, qos *int) {
   opts := mqtt.NewClientOptions().SetBroker(*broker).SetClientId(*clientid).SetCleanSession(true).SetTraceLevel(mqtt.Off)
   client := mqtt.NewClient(opts)
   _, err := client.Start()
   if err != nil {
     panic(err)
   } else {
-    fmt.Printf("Connected as %s to %s\n", *clientid, *broker)
+    log.Printf("Connected as %s to %s\n", *clientid, *broker)
   }
   filter, e := mqtt.NewTopicFilter(*topic, byte(*qos))
   if e != nil {
-    fmt.Println(e)
-    os.Exit(1)
+    log.Fatal(e)
   }
   client.StartSubscription(onMessageReceived, filter)
 
 }
 
-func hello(w http.ResponseWriter, r *http.Request) { 
+func jsonHandler(w http.ResponseWriter, r *http.Request) { 
   jsonStatus, err := json.Marshal(status)
   if err != nil {
-    fmt.Println("error:", err)
+    log.Println("error:", err)
   }
-  fmt.Fprintf(w, string(jsonStatus))
+  w.Write(jsonStatus)
 }
 
-func main() {
-  mqttSetup()
-  dir := flag.String("directory", "web/", "directory of web files")
-  flag.Parse()
+func webSetup(dir *string, iface *string, port *string) {
   connections = make(map[*websocket.Conn]bool)
   fs := http.Dir(*dir)
   fileHandler := http.FileServer(fs)
   http.Handle("/", fileHandler)
-  http.HandleFunc("/status.json",hello)
+  http.HandleFunc("/status.json",jsonHandler)
   http.HandleFunc("/ws", wsHandler)
-  http.ListenAndServe("0.0.0.0:80", nil)
-  // web.Get("/(.*)", hello)
-  // web.Run("0.0.0.0:9999")
+  err := http.ListenAndServe(*iface + ":" + *port, nil)
+  if err != nil {
+    log.Println("error:", err)
+  }
+}
+
+func main() {
+  var (
+
+    // MQTT configuration
+
+    broker = flag.String("broker", "tcp://10.138.123.180:1883", "mqtt broker")
+    clientid = flag.String("clientid", "dasheen", "mqtt clientid")
+    topic = flag.String("topic", "callaloo/#", "mqtt topic name")
+    qos = flag.Int("qos", 1, "mqtt quality of service level")
+
+    // Web and websockets configuration
+
+    dir = flag.String("directory", "web/", "directory of web files")
+    port = flag.String("port", "4102", "port to run on")
+    iface = flag.String("iface", "0.0.0.0", "network interface to bind to")
+  )
+  flag.Parse()
+  mqttSetup(broker, clientid, topic, qos)
+  webSetup(dir, iface, port)
 }
 
