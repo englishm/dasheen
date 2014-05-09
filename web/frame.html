@@ -1,0 +1,160 @@
+<html ng-app="dasheen">
+<head>
+  <title>Dasheen</title>
+  <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.min.css">
+  <link rel="stylesheet" href="frame.css">
+  <style id="holderjs-style" type="text/css"></style>
+  <style>
+    #log {
+      height: 200px;
+      overflow: scroll;
+    }
+  </style>
+</head>
+<body ng-controller="MainCtl">
+  </div>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-sm-9 col-md-10 main">
+        <div class="row placeholders">
+
+          <div class="col-xs-6 col-sm-2 placeholder">
+            <svg height="80" width="80">
+              <circle cx="40" cy="40" r="36" stroke="#333333" stroke-width="1" ng-attr-fill="{{upstairsColor}}" />
+            </svg>
+            <h4>Upstairs Status</h4>
+            <span class="text-muted" ng-bind="upstairsText"></span>
+          </div>
+
+          <div class="col-xs-6 col-sm-2 placeholder">
+            <svg height="80" width="80">
+              <circle cx="40" cy="40" r="36" stroke="#333333" stroke-width="1" ng-attr-fill="{{downstairsColor}}" />
+            </svg>
+            <h4>Downstairs Status</h4>
+            <span class="text-muted" ng-bind="downstairsText"></span>
+          </div>
+
+        </div>
+
+        <div class="row placeholders">
+          <div class="col-xs-6 col-sm-2 placeholder">
+            <h4>Changes</h4>
+            <div id="log">
+              <ul>
+                <li ng-repeat="m in upstairsMessages track by $index">{{m}}</li>
+              </ul>
+            </div>
+          </div>
+
+
+          <div class="col-xs-6 col-sm-2 placeholder">
+            <h4>Changes</h4>
+            <div id="log">
+              <ul>
+                <li ng-repeat="m in downstairsMessages track by $index">{{m}}</li>
+              </ul>
+            </div>
+            <!-- <span class="text-muted">Something else</span> -->
+            <!-- <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()"> -->
+            <!-- <button class="btn btn-primary" ng-click="send()">Send</button> -->
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="https://raw.githubusercontent.com/imsky/holder/master/holder.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.3/angular.min.js"></script>
+<script>
+  var app = angular.module("dasheen", []);
+
+  app.directive('ngEnter', function () {
+    return function (scope, element, attrs) {
+      element.bind("keydown keypress", function (event) {
+        if(event.which === 13) {
+          scope.$apply(function (){
+            scope.$eval(attrs.ngEnter);
+          });
+
+          event.preventDefault();
+        }
+      });
+    };
+  });
+
+  app.controller("MainCtl", ["$scope", function($scope) {
+    $scope.generalMessages = [];
+    $scope.upstairsMessages = [];
+    $scope.downstairsMessages = [];
+    $scope.upstairsColor = "#ECF24BCC";
+    $scope.upstairsText = "unknown";
+    $scope.downstairsColor = "#ECF24BCC";
+    $scope.downstairsText = "unknown";
+
+    host = document.location.host;
+
+    var conn = new WebSocket("ws://"+ host +"/ws");
+    // called when the server closes the connection
+    conn.onclose = function(e) {
+      $scope.$apply(function(){
+        $scope.generalMessages.push("DISCONNECTED");
+      });
+    };
+
+    // called when the connection to the server is made
+    conn.onopen = function(e) {
+      $scope.$apply(function(){
+        $scope.generalMessages.push("CONNECTED");
+      })
+    };
+
+    // called when a message is received from the server
+    conn.onmessage = function(e){
+      $scope.$apply(function(){
+        // console.log(e.data)
+        now = new Date();
+        timestamp = now.toLocaleString();
+        var status = angular.fromJson(e.data);
+        if(status.Upstairs != $scope.upstairsText){
+          $scope.upstairsMessages.push(timestamp + " : " + $scope.upstairsText + " -> " + status.Upstairs);
+          $scope.upstairsText = status.Upstairs;
+          switch($scope.upstairsText) {
+            case "open":
+              $scope.upstairsColor = "#79CCC7";
+              break;
+            case "closed":
+              $scope.upstairsColor = "#EE3A43";
+              break;
+            default:
+              $scope.upstairsColor = "#ECF24BCC";
+          }
+        }
+        if(status.Downstairs != $scope.downstairsText){
+          $scope.downstairsMessages.push(timestamp + " : " + $scope.downstairsText + " -> " + status.Downstairs);
+          $scope.downstairsText = status.Downstairs;
+          switch($scope.downstairsText) {
+            case "open":
+              $scope.downstairsColor = "#79CCC7";
+              break;
+            case "closed":
+              $scope.downstairsColor = "#EE3A43";
+              break;
+            default:
+              $scope.downstairsColor = "#ECF24BCC";
+          }
+        }
+        // console.log(status);
+        // $scope.messages.push(e.data);
+      });
+    };
+
+    $scope.send = function() {
+      conn.send($scope.msg);
+      $scope.msg = "";
+    }
+  }]);
+</script>
+</body>
+</html>
