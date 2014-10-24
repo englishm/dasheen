@@ -116,7 +116,7 @@ func main() {
 
 		// MQTT configuration
 
-		broker   = flag.String("broker", "tcp://10.138.123.180:1883", "mqtt broker")
+		broker   = flag.String("broker", "tcp://10.138.123.50:1883", "mqtt broker")
 		clientid = flag.String("clientid", "dasheen", "mqtt clientid")
 		topic    = flag.String("topic", "callaloo/#", "mqtt topic name")
 		qos      = flag.Int("qos", 1, "mqtt quality of service level")
