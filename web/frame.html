@@ -19,28 +19,38 @@
       <div class="col-sm-9 col-md-10 main">
         <div class="row placeholders">
 
-          <div class="col-xs-6 col-sm-2 placeholder">
+          <div class="col-xs-3 col-sm-1 placeholder">
             <svg height="80" width="80" ng-switch="upstairsText">
               <path ng-switch-when="open" id="upstairs-open" transform="scale(0.6)" fill="#00aaa1" d="M65,1.8c-16.5,23.3-32.9,46.7-49.4,70h22.7v56.4h53.4v-56.2h22.7c-15.7-23.1-32.1-46.5-48.6-69.8zm-15.4,77.3c2.51,0.0675,5.05-0.133,7.53,0.0964,1.2,2.29,0.322,5.27,0.592,7.86-0.172,3.54,0.355,7.19-0.284,10.7-2.4,0.804-5.26,0.143-7.84,0.358-1.83-1.31-0.618-4.29-0.969-6.35,0.176-4.07-0.36-8.26,0.284-12.3l0.308-0.262,0.377-0.0964zm20.1,15.9c2.84-0.0589,10.9,0.0019,9.98,2.94h-21.1c1.71-3.69,7.83-2.51,11.2-2.94zm11.8,4.47c-2.3,4.94-10.2,6.66-6.83,13.4,2.66,4.21-0.779,3.61-3.79,3.52h-13.9c2.88-4.59,3.39-11.7-1.91-14.8-3.44-1.82-2.44-2,0.721-1.85,8.58-0.101,17.2-0.202,25.8-0.302z"/>
               <path ng-switch-when="closed" id="upstairs-closed" transform="scale(0.6)" fill="#ef3e42" d="M65,1.8c-16.5,23.3-32.9,46.7-49.4,70h22.7v56.4h53.4v-56.2h22.7c-15.7-23.1-32.1-46.5-48.6-69.8zm0,74.5c12-0.3,22.3,11.7,20.1,23.5-1.4,12.2-14.8,20.2-26.1,16.2-11.6-3-17.9-17.5-12.4-28.1,3.3-7,10.7-11.7,18.4-11.6zm0,5.38c-3.35-0.106-11.5,1.89-6.04,5.15l18.4,18.4c5.8-7.6,1.5-20.1-7.9-22.6-1.5-0.5-3-0.7-4.5-0.7zm-12.3,6.47c-5.88,7.82-1.52,20.3,7.87,22.9,3.33,1.45,13.7,0.594,11.9-3.12-6.7-7-13.3-13.2-19.8-19.8z"/>
               <text ng-switch-default style="font-weight:bold;font-size:40px;fill:#FFF6DC;" id="upstairs-wat" x="20" y="40">??</text>
             </svg>
-            <h4>Upstairs Status</h4>
+            <h4>Upstairs</h4>
             <span class="text-muted" ng-bind="upstairsText"></span>
           </div>
+          <div class="col-xs-3 col-sm-1 placeholder">
             <svg height="80" width="80" ng-switch="downstairsText">
               <path ng-switch-when="open" id="downstairs-open" transform="scale(0.6)" fill="#00aaa1" d="M38.5,1.9v56.4h-22.7c16.5,23.3,32.9,46.8,49.4,69.8,16.5-23,32.9-46.5,49-69.8h-22.5v-56.3h-53.4zm11.2,11.8c2.59,0.221,5.45-0.448,7.87,0.343,0.639,4.36,0.112,8.92,0.284,13.4-0.271,1.79,1,5.63-1.93,5.27-2.26-0.227-4.82,0.463-6.89-0.358-0.605-4.7-0.104-9.57-0.268-14.3,0.257-1.32-0.688-3.72,0.938-4.27zm20.2,15.9c2.84-0.0589,10.9,0.0019,9.98,2.94h-21.2c1.73-3.69,7.85-2.51,11.2-2.94zm11.7,4.47c-2.31,4.93-10.2,6.68-6.8,13.4,2.66,4.21-0.779,3.61-3.79,3.52h-14c2.91-4.57,3.42-11.7-1.88-14.8-3.44-1.82-2.44-2,0.721-1.85,8.57-0.101,17.1-0.202,25.7-0.302z"/>
               <path ng-switch-when="closed" id="downstairs-closed" transform="scale(0.6)" fill="#ef3e42" d="m38.2,1.8v56.4h-22.6c16.4,23.4,32.9,46.7,49.3,70,16.5-23.3,32.9-46.7,49.4-70h-22.4v-56.2h-53.4zm26.7,11.1c12-0.371,22.3,11.6,20.1,23.5-1.47,11.9-14.8,20.3-26.2,16.4-11.5-3.3-17.8-17.7-12.3-28.3,3.3-7,10.7-11.7,18.4-11.6zm0,5.41c-9.34-0.357-17,9.43-14.6,18.4,0.526,4.02,2.61,6.25,4.96,2.37,6.05-6.05,12.1-12.1,18.2-18.2-2.49-1.73-5.5-2.67-8.53-2.66zm12.3,6.44c-6.96,6.96-13.9,13.9-20.9,20.9,7.82,5.88,20.3,1.52,22.9-7.87,1.36-4.34,0.633-9.27-1.98-13z"/>
               <text ng-switch-default style="font-weight:bold;font-size:40px;fill:#FFF6DC;" id="downstairs-wat" x="20" y="40">??</text>
             </svg>
-            <h4>Downstairs Status</h4>
+            <h4>Downstairs</h4>
             <span class="text-muted" ng-bind="downstairsText"></span>
+          </div>
+          <div class="col-xs-3 col-sm-1 placeholder">
+            <svg height="80" width="80" ng-switch="downstairs2Text">
+              <path ng-switch-when="open" id="downstairs-open" transform="scale(0.6)" fill="#00aaa1" d="M38.5,1.9v56.4h-22.7c16.5,23.3,32.9,46.8,49.4,69.8,16.5-23,32.9-46.5,49-69.8h-22.5v-56.3h-53.4zm11.2,11.8c2.59,0.221,5.45-0.448,7.87,0.343,0.639,4.36,0.112,8.92,0.284,13.4-0.271,1.79,1,5.63-1.93,5.27-2.26-0.227-4.82,0.463-6.89-0.358-0.605-4.7-0.104-9.57-0.268-14.3,0.257-1.32-0.688-3.72,0.938-4.27zm20.2,15.9c2.84-0.0589,10.9,0.0019,9.98,2.94h-21.2c1.73-3.69,7.85-2.51,11.2-2.94zm11.7,4.47c-2.31,4.93-10.2,6.68-6.8,13.4,2.66,4.21-0.779,3.61-3.79,3.52h-14c2.91-4.57,3.42-11.7-1.88-14.8-3.44-1.82-2.44-2,0.721-1.85,8.57-0.101,17.1-0.202,25.7-0.302z"/>
+              <path ng-switch-when="closed" id="downstairs-closed" transform="scale(0.6)" fill="#ef3e42" d="m38.2,1.8v56.4h-22.6c16.4,23.4,32.9,46.7,49.3,70,16.5-23.3,32.9-46.7,49.4-70h-22.4v-56.2h-53.4zm26.7,11.1c12-0.371,22.3,11.6,20.1,23.5-1.47,11.9-14.8,20.3-26.2,16.4-11.5-3.3-17.8-17.7-12.3-28.3,3.3-7,10.7-11.7,18.4-11.6zm0,5.41c-9.34-0.357-17,9.43-14.6,18.4,0.526,4.02,2.61,6.25,4.96,2.37,6.05-6.05,12.1-12.1,18.2-18.2-2.49-1.73-5.5-2.67-8.53-2.66zm12.3,6.44c-6.96,6.96-13.9,13.9-20.9,20.9,7.82,5.88,20.3,1.52,22.9-7.87,1.36-4.34,0.633-9.27-1.98-13z"/>
+              <text ng-switch-default style="font-weight:bold;font-size:40px;fill:#FFF6DC;" id="downstairs-wat" x="20" y="40">??</text>
+            </svg>
+            <h4>Downstairs2</h4>
+            <span class="text-muted" ng-bind="downstairs2Text"></span>
           </div>
 
         </div>
 
         <div class="row placeholders">
-          <div class="col-xs-6 col-sm-2 placeholder">
+          <div class="col-xs-3 col-sm-1 placeholder">
             <h4>Changes</h4>
             <div id="log">
               <ul>
@@ -50,7 +60,7 @@
           </div>
 
 
-          <div class="col-xs-6 col-sm-2 placeholder">
+          <div class="col-xs-3 col-sm-1 placeholder">
             <h4>Changes</h4>
             <div id="log">
               <ul>
@@ -60,6 +70,16 @@
             <!-- <span class="text-muted">Something else</span> -->
             <!-- <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()"> -->
             <!-- <button class="btn btn-primary" ng-click="send()">Send</button> -->
+          </div>
+
+
+          <div class="col-xs-3 col-sm-1 placeholder">
+            <h4>Changes</h4>
+            <div id="log">
+              <ul>
+                <li ng-repeat="m in downstairs2Messages track by $index">{{m}}</li>
+              </ul>
+            </div>
           </div>
 
         </div>
@@ -90,10 +110,13 @@
     $scope.generalMessages = [];
     $scope.upstairsMessages = [];
     $scope.downstairsMessages = [];
+    $scope.downstairs2Messages = [];
     $scope.upstairsColor = "#ECF24BCC";
     $scope.upstairsText = "unknown";
     $scope.downstairsColor = "#ECF24BCC";
     $scope.downstairsText = "unknown";
+    $scope.downstairs2Color = "#ECF24BCC";
+    $scope.downstairs2Text = "unknown";
 
     host = document.location.host;
 
@@ -145,6 +168,20 @@
               break;
             default:
               $scope.downstairsColor = "#ECF24BCC";
+          }
+        }
+        if(status.Downstairs2 != $scope.downstairs2Text){
+          $scope.downstairs2Messages.push(timestamp + " : " + $scope.downstairs2Text + " -> " + status.Downstairs2);
+          $scope.downstairs2Text = status.Downstairs2;
+          switch($scope.downstairsText2) {
+            case "open":
+              $scope.downstairs2Color = "#79CCC7";
+              break;
+            case "closed":
+              $scope.downstairs2Color = "#EE3A43";
+              break;
+            default:
+              $scope.downstairs2Color = "#ECF24BCC";
           }
         }
         // console.log(status);

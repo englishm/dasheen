@@ -12,11 +12,13 @@ import (
 type bathroomStatus struct {
 	Upstairs   string
 	Downstairs string
+	Downstairs2 string
 }
 
 var status = bathroomStatus{
 	Upstairs:   "unknown",
 	Downstairs: "unknown",
+	Downstairs2: "unknown",
 }
 
 var connections map[*websocket.Conn]bool
@@ -30,6 +32,9 @@ func onMessageReceived(client *mqtt.MqttClient, message mqtt.Message) {
 	}
 	if t == "callaloo/downstairs" {
 		status.Downstairs = msg
+	}
+	if t == "callaloo/downstairs2" {
+		status.Downstairs2 = msg
 	}
 	jsonStatus, err := json.Marshal(status)
 	if err != nil {

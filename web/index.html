@@ -82,6 +82,29 @@
           </div>
 
         </div>
+        <div class="row placeholders">
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <svg height="200" width="200">
+              <circle cx="100" cy="100" r="90" stroke="black" stroke-width="3" ng-attr-fill="{{downstairs2Color}}" />
+            </svg>
+            <h4>Downstairs2 Status</h4>
+            <span class="text-muted" ng-bind="downstairsText"></span>
+          </div>
+
+          <div class="col-xs-6 col-sm-3 placeholder">
+            <h4>Changes</h4>
+            <div id="log">
+              <ul>
+                <li ng-repeat="m in downstairs2Messages track by $index">{{m}}</li>
+              </ul>
+            </div>
+            <!-- <span class="text-muted">Something else</span> -->
+            <!-- <input type="text" placeholder="type here" ng-model="msg" ng-enter="send()"> -->
+            <!-- <button class="btn btn-primary" ng-click="send()">Send</button> -->
+          </div>
+
+        </div>
       </div>
     </div>
   </div>
@@ -109,10 +132,13 @@
     $scope.generalMessages = [];
     $scope.upstairsMessages = [];
     $scope.downstairsMessages = [];
+    $scope.downstairs2Messages = [];
     $scope.upstairsColor = "yellow";
     $scope.upstairsText = "unknown";
     $scope.downstairsColor = "yellow";
     $scope.downstairsText = "unknown";
+    $scope.downstairs2Color = "yellow";
+    $scope.downstairs2Text = "unknown";
 
     host = document.location.host;
 
@@ -164,6 +190,20 @@
               break;
             default:
               $scope.downstairsColor = "yellow";
+          }
+        }
+        if(status.Downstairs2 != $scope.downstairs2Text){
+          $scope.downstairs2Messages.push(timestamp + " : " + $scope.downstairs2Text + " -> " + status.Downstairs2);
+          $scope.downstairs2Text = status.Downstairs2;
+          switch($scope.downstairs2Text) {
+            case "open":
+              $scope.downstairs2Color = "green";
+              break;
+            case "closed":
+              $scope.downstairs2Color = "red";
+              break;
+            default:
+              $scope.downstairs2Color = "yellow";
           }
         }
         // console.log(status);
