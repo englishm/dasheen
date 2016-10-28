@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	mqtt "git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git"
+	mqtt "./vendor/git.eclipse.org/r/paho/org.eclipse.paho.mqtt.golang"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
