@@ -22,7 +22,6 @@ import (
 	"time"
 
 	MQTT "git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git"
-	"git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git/packets"
 )
 
 // This NoOpStore type implements the go-mqtt/Store interface, which
@@ -37,11 +36,11 @@ func (store *NoOpStore) Open() {
 	// Do nothing
 }
 
-func (store *NoOpStore) Put(string, packets.ControlPacket) {
+func (store *NoOpStore) Put(string, *MQTT.Message) {
 	// Do nothing
 }
 
-func (store *NoOpStore) Get(string) packets.ControlPacket {
+func (store *NoOpStore) Get(string) *MQTT.Message {
 	// Do nothing
 	return nil
 }
@@ -62,30 +61,35 @@ func (store *NoOpStore) Reset() {
 	// Do Nothing
 }
 
+func (store *NoOpStore) SetTracer(tracer *MQTT.Tracer) {
+	// Do Nothing
+}
+
 func main() {
 	myNoOpStore := &NoOpStore{}
 
 	opts := MQTT.NewClientOptions()
-	opts.AddBroker("tcp://iot.eclipse.org:1883")
-	opts.SetClientID("custom-store")
+	opts.SetBroker("tcp://test.mosquitto.org:1883")
+	opts.SetClientId("custom-store")
 	opts.SetStore(myNoOpStore)
 
-	var callback MQTT.MessageHandler = func(client *MQTT.Client, msg MQTT.Message) {
+	var callback MQTT.MessageHandler = func(client *MQTT.MqttClient, msg MQTT.Message) {
 		fmt.Printf("TOPIC: %s\n", msg.Topic())
 		fmt.Printf("MSG: %s\n", msg.Payload())
 	}
 
 	c := MQTT.NewClient(opts)
-	if token := c.Connect(); token.Wait() && token.Error() != nil {
-		panic(token.Error())
+	_, err := c.Start()
+	if err != nil {
+		panic(err)
 	}
 
-	c.Subscribe("/go-mqtt/sample", 0, callback)
+	filter, _ := MQTT.NewTopicFilter("/go-mqtt/sample", 0)
+	c.StartSubscription(callback, filter)
 
 	for i := 0; i < 5; i++ {
 		text := fmt.Sprintf("this is msg #%d!", i)
-		token := c.Publish("/go-mqtt/sample", 0, false, text)
-		token.Wait()
+		c.Publish(MQTT.QOS_ONE, "/go-mqtt/sample", []byte(text))
 	}
 
 	for i := 1; i < 5; i++ {

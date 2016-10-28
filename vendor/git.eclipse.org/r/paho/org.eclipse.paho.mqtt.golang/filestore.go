@@ -20,13 +20,11 @@ import (
 	"os"
 	"path"
 	"sync"
-
-	"git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git/packets"
 )
 
 const (
-	msgExt = ".msg"
-	bkpExt = ".bkp"
+	_MSG_EXT = ".msg"
+	_BKP_EXT = ".bkp"
 )
 
 // FileStore implements the store interface using the filesystem to provide
@@ -38,6 +36,7 @@ type FileStore struct {
 	sync.RWMutex
 	directory string
 	opened    bool
+	t         *Tracer
 }
 
 // NewFileStore will create a new FileStore which stores its messages in the
@@ -46,6 +45,7 @@ func NewFileStore(directory string) *FileStore {
 	store := &FileStore{
 		directory: directory,
 		opened:    false,
+		t:         nil,
 	}
 	return store
 }
@@ -67,7 +67,7 @@ func (store *FileStore) Open() {
 		chkerr(merr)
 	}
 	store.opened = true
-	DEBUG.Println(STR, "store is opened at", store.directory)
+	store.t.Trace_V(STR, "store is opened at %s", store.directory)
 }
 
 // Close will disallow the FileStore from being used.
@@ -75,12 +75,12 @@ func (store *FileStore) Close() {
 	store.Lock()
 	defer store.Unlock()
 	store.opened = false
-	WARN.Println(STR, "store is not open")
+	store.t.Trace_W(STR, "store is not open")
 }
 
 // Put will put a message into the store, associated with the provided
 // key value.
-func (store *FileStore) Put(key string, m packets.ControlPacket) {
+func (store *FileStore) Put(key string, m *Message) {
 	store.Lock()
 	defer store.Unlock()
 	chkcond(store.opened)
@@ -95,7 +95,7 @@ func (store *FileStore) Put(key string, m packets.ControlPacket) {
 
 // Get will retrieve a message from the store, the one associated with
 // the provided key value.
-func (store *FileStore) Get(key string) packets.ControlPacket {
+func (store *FileStore) Get(key string) (m *Message) {
 	store.RLock()
 	defer store.RUnlock()
 	chkcond(store.opened)
@@ -105,10 +105,9 @@ func (store *FileStore) Get(key string) packets.ControlPacket {
 	}
 	mfile, oerr := os.Open(filepath)
 	chkerr(oerr)
-	//all, rerr := ioutil.ReadAll(mfile)
-	//chkerr(rerr)
-	msg, rerr := packets.ReadPacket(mfile)
+	all, rerr := ioutil.ReadAll(mfile)
 	chkerr(rerr)
+	msg := decode(all)
 	cerr := mfile.Close()
 	chkerr(cerr)
 	return msg
@@ -134,7 +133,7 @@ func (store *FileStore) Del(key string) {
 func (store *FileStore) Reset() {
 	store.Lock()
 	defer store.Unlock()
-	WARN.Println(STR, "FileStore Reset")
+	store.t.Trace_W(STR, "FileStore Reset")
 	for _, key := range store.all() {
 		store.del(key)
 	}
@@ -147,7 +146,7 @@ func (store *FileStore) all() []string {
 	files, rderr := ioutil.ReadDir(store.directory)
 	chkerr(rderr)
 	for _, f := range files {
-		DEBUG.Println(STR, "file in All():", f.Name())
+		store.t.Trace_V(STR, "file in All(): %s", f.Name())
 		key := f.Name()[0 : len(f.Name())-4] // remove file extension
 		keys = append(keys, key)
 	}
@@ -157,27 +156,31 @@ func (store *FileStore) all() []string {
 // lockless
 func (store *FileStore) del(key string) {
 	chkcond(store.opened)
-	DEBUG.Println(STR, "store del filepath:", store.directory)
-	DEBUG.Println(STR, "store delete key:", key)
+	store.t.Trace_V(STR, "store del filepath: %s", store.directory)
+	store.t.Trace_V(STR, "store delete key: %v", key)
 	filepath := fullpath(store.directory, key)
-	DEBUG.Println(STR, "path of deletion:", filepath)
+	store.t.Trace_V(STR, "path of deletion: `%s`", filepath)
 	if !exists(filepath) {
-		WARN.Println(STR, "store could not delete key:", key)
+		store.t.Trace_W(STR, "store could not delete key: %v", key)
 		return
 	}
 	rerr := os.Remove(filepath)
 	chkerr(rerr)
-	DEBUG.Println(STR, "del msg:", key)
+	store.t.Trace_V(STR, "del msg: %v", key)
 	chkcond(!exists(filepath))
 }
 
+func (store *FileStore) SetTracer(trace *Tracer) {
+	store.t = trace
+}
+
 func fullpath(store string, key string) string {
-	p := path.Join(store, key+msgExt)
+	p := path.Join(store, key+_MSG_EXT)
 	return p
 }
 
 func bkppath(store string, key string) string {
-	p := path.Join(store, key+bkpExt)
+	p := path.Join(store, key+_BKP_EXT)
 	return p
 }
 
@@ -186,11 +189,11 @@ func bkppath(store string, key string) string {
 // if a message with m's message id already exists, it will
 // be overwritten
 // X will be 'i' for inbound messages, and O for outbound messages
-func write(store, key string, m packets.ControlPacket) {
+func write(store, key string, m *Message) {
 	filepath := fullpath(store, key)
 	f, err := os.Create(filepath)
 	chkerr(err)
-	werr := m.Write(f)
+	_, werr := f.Write(m.Bytes())
 	chkerr(werr)
 	cerr := f.Close()
 	chkerr(cerr)
@@ -230,7 +233,7 @@ func restore(store string) {
 	for _, f := range files {
 		fname := f.Name()
 		if len(fname) > 4 {
-			if fname[len(fname)-4:] == bkpExt {
+			if fname[len(fname)-4:] == _BKP_EXT {
 				key := fname[0 : len(fname)-4]
 				fulp := fullpath(store, key)
 				msg, cerr := os.Create(fulp)

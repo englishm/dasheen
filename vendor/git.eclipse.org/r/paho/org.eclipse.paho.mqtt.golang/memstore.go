@@ -16,8 +16,6 @@ package mqtt
 
 import (
 	"sync"
-
-	"git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git/packets"
 )
 
 // MemoryStore implements the store interface to provide a "persistence"
@@ -25,8 +23,9 @@ import (
 // as long as the client instance exists.
 type MemoryStore struct {
 	sync.RWMutex
-	messages map[string]packets.ControlPacket
+	messages map[string]*Message
 	opened   bool
+	t        *Tracer
 }
 
 // NewMemoryStore returns a pointer to a new instance of
@@ -34,8 +33,9 @@ type MemoryStore struct {
 // use until Open() has been called on it.
 func NewMemoryStore() *MemoryStore {
 	store := &MemoryStore{
-		messages: make(map[string]packets.ControlPacket),
+		messages: make(map[string]*Message),
 		opened:   false,
+		t:        nil,
 	}
 	return store
 }
@@ -45,12 +45,12 @@ func (store *MemoryStore) Open() {
 	store.Lock()
 	defer store.Unlock()
 	store.opened = true
-	DEBUG.Println(STR, "memorystore initialized")
+	store.t.Trace_V(STR, "memorystore initialized")
 }
 
 // Put takes a key and a pointer to a Message and stores the
 // message.
-func (store *MemoryStore) Put(key string, message packets.ControlPacket) {
+func (store *MemoryStore) Put(key string, message *Message) {
 	store.Lock()
 	defer store.Unlock()
 	chkcond(store.opened)
@@ -59,16 +59,16 @@ func (store *MemoryStore) Put(key string, message packets.ControlPacket) {
 
 // Get takes a key and looks in the store for a matching Message
 // returning either the Message pointer or nil.
-func (store *MemoryStore) Get(key string) packets.ControlPacket {
+func (store *MemoryStore) Get(key string) *Message {
 	store.RLock()
 	defer store.RUnlock()
 	chkcond(store.opened)
-	mid := mIDFromKey(key)
+	mid := key2mid(key)
 	m := store.messages[key]
 	if m == nil {
-		CRITICAL.Println(STR, "memorystore get: message", mid, "not found")
+		store.t.Trace_C(STR, "memorystore get: message %v not found", mid)
 	} else {
-		DEBUG.Println(STR, "memorystore get: message", mid, "found")
+		store.t.Trace_V(STR, "memorystore get: message %v found", mid)
 	}
 	return m
 }
@@ -80,7 +80,7 @@ func (store *MemoryStore) All() []string {
 	defer store.RUnlock()
 	chkcond(store.opened)
 	keys := []string{}
-	for k := range store.messages {
+	for k, _ := range store.messages {
 		keys = append(keys, k)
 	}
 	return keys
@@ -91,13 +91,13 @@ func (store *MemoryStore) All() []string {
 func (store *MemoryStore) Del(key string) {
 	store.Lock()
 	defer store.Unlock()
-	mid := mIDFromKey(key)
+	mid := key2mid(key)
 	m := store.messages[key]
 	if m == nil {
-		WARN.Println(STR, "memorystore del: message", mid, "not found")
+		store.t.Trace_W(STR, "memorystore del: message %v not found", mid)
 	} else {
 		store.messages[key] = nil
-		DEBUG.Println(STR, "memorystore del: message", mid, "was deleted")
+		store.t.Trace_V(STR, "memorystore del: message %v was deleted", mid)
 	}
 }
 
@@ -107,7 +107,7 @@ func (store *MemoryStore) Close() {
 	defer store.Unlock()
 	chkcond(store.opened)
 	store.opened = false
-	DEBUG.Println(STR, "memorystore closed")
+	store.t.Trace_V(STR, "memorystore closed")
 }
 
 // Reset eliminates all persisted message data in the store.
@@ -115,6 +115,12 @@ func (store *MemoryStore) Reset() {
 	store.Lock()
 	defer store.Unlock()
 	chkcond(store.opened)
-	store.messages = make(map[string]packets.ControlPacket)
-	WARN.Println(STR, "memorystore wiped")
+	store.messages = make(map[string]*Message)
+	store.t.Trace_W(STR, "memorystore wiped")
+}
+
+func (store *MemoryStore) SetTracer(tracer *Tracer) {
+	store.Lock()
+	defer store.Unlock()
+	store.t = tracer
 }

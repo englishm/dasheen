@@ -12,543 +12,316 @@
  *    Mike Robertson
  */
 
-// Package mqtt provides an MQTT v3.1.1 client library.
+// Package mqtt provides an MQTT v3.1 client library.
 package mqtt
 
 import (
+	"bufio"
 	"errors"
-	"fmt"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
-
-	"git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git/packets"
 )
 
-type connStatus uint
-
-const (
-	disconnected connStatus = iota
-	connecting
-	reconnecting
-	connected
-)
-
-// ClientInt is the interface definition for a Client as used by this
-// library, the interface is primarily to allow mocking tests.
-type ClientInt interface {
-	IsConnected() bool
-	Connect() Token
-	Disconnect(uint)
-	disconnect()
-	Publish(string, byte, bool, interface{}) Token
-	Subscribe(string, byte, MessageHandler) Token
-	SubscribeMultiple(map[string]byte, MessageHandler) Token
-	Unsubscribe(...string) Token
-}
-
-// Client is an MQTT v3.1.1 client for communicating
+// MqttClient is a lightweight MQTT v3.1 Client for communicating
 // with an MQTT server using non-blocking methods that allow work
 // to be done in the background.
+
 // An application may connect to an MQTT server using:
 //   A plain TCP socket
 //   A secure SSL/TLS socket
 //   A websocket
+
 // To enable ensured message delivery at Quality of Service (QoS) levels
 // described in the MQTT spec, a message persistence mechanism must be
 // used. This is done by providing a type which implements the Store
 // interface. For convenience, FileStore and MemoryStore are provided
 // implementations that should be sufficient for most use cases. More
 // information can be found in their respective documentation.
+
 // Numerous connection options may be specified by configuring a
 // and then supplying a ClientOptions type.
-type Client struct {
+type MqttClient struct {
 	sync.RWMutex
-	messageIds
 	conn            net.Conn
-	ibound          chan packets.ControlPacket
-	obound          chan *PacketAndToken
-	oboundP         chan *PacketAndToken
-	msgRouter       *router
-	stopRouter      chan bool
-	incomingPubChan chan *packets.PublishPacket
+	bufferedConn    *bufio.ReadWriter
+	ibound          chan *Message
+	obound          chan sendable
+	oboundP         chan *Message
+	begin           chan ConnRC
 	errors          chan error
 	stop            chan struct{}
+	receipts        *receiptMap
+	t               *Tracer
+	sessId          uint
 	persist         Store
 	options         ClientOptions
-	pingTimer       *time.Timer
-	pingRespTimer   *time.Timer
-	status          connStatus
-	workers         sync.WaitGroup
+	lastContact     lastcontact
+	pingOutstanding bool
+	connected       bool
 }
 
-// NewClient will create an MQTT v3.1.1 client with all of the options specified
+// NewClient will create an MQTT v3.1 client with all of the options specified
 // in the provided ClientOptions. The client must have the Start method called
 // on it before it may be used. This is to make sure resources (such as a net
 // connection) are created before the application is actually ready.
-func NewClient(o *ClientOptions) *Client {
-	c := &Client{}
-	c.options = *o
+func NewClient(ops *ClientOptions) *MqttClient {
+	c := &MqttClient{}
+	c.sessId = uint(rand.Int())
+	c.sessId = 0
+	c.options = *ops
 
-	if c.options.Store == nil {
-		c.options.Store = NewMemoryStore()
+	if c.options.store == nil {
+		c.options.store = NewMemoryStore()
 	}
-	switch c.options.ProtocolVersion {
-	case 3, 4:
-		c.options.protocolVersionExplicit = true
-	default:
-		c.options.ProtocolVersion = 4
-		c.options.protocolVersionExplicit = false
-	}
-	c.persist = c.options.Store
-	c.status = disconnected
-	c.messageIds = messageIds{index: make(map[uint16]Token)}
-	c.msgRouter, c.stopRouter = newRouter()
-	c.msgRouter.setDefaultHandler(c.options.DefaultPublishHander)
-	if !c.options.AutoReconnect {
-		c.options.MessageChannelDepth = 0
-	}
+	c.persist = c.options.store
+	c.connected = false
 	return c
 }
 
-// IsConnected returns a bool signifying whether
-// the client is connected or not.
-func (c *Client) IsConnected() bool {
+func (c *MqttClient) IsConnected() bool {
 	c.RLock()
 	defer c.RUnlock()
-	switch {
-	case c.status == connected:
-		return true
-	case c.options.AutoReconnect && c.status > disconnected:
-		return true
-	default:
-		return false
-	}
+	return c.connected
 }
 
-func (c *Client) connectionStatus() connStatus {
-	c.RLock()
-	defer c.RUnlock()
-	return c.status
-}
-
-func (c *Client) setConnected(status connStatus) {
-	c.Lock()
-	defer c.Unlock()
-	c.status = status
-}
-
-//ErrNotConnected is the error returned from function calls that are
-//made when the client is not connected to a broker
-var ErrNotConnected = errors.New("Not Connected")
-
-// Connect will create a connection to the message broker
+// Start will create a connection to the message broker
 // If clean session is false, then a slice will
 // be returned containing Receipts for all messages
 // that were in-flight at the last disconnect.
 // If clean session is true, then any existing client
 // state will be removed.
-func (c *Client) Connect() Token {
-	var err error
-	t := newToken(packets.Connect).(*ConnectToken)
-	DEBUG.Println(CLI, "Connect()")
+func (c *MqttClient) Start() ([]Receipt, error) {
 
-	go func() {
-		c.setConnected(connecting)
-		var rc byte
-		cm := newConnectMsgFromOptions(&c.options)
-
-		for _, broker := range c.options.Servers {
-		CONN:
-			DEBUG.Println(CLI, "about to write new connect msg")
-			c.conn, err = openConnection(broker, &c.options.TLSConfig, c.options.ConnectTimeout)
-			if err == nil {
-				DEBUG.Println(CLI, "socket connected to broker")
-				switch c.options.ProtocolVersion {
-				case 3:
-					DEBUG.Println(CLI, "Using MQTT 3.1 protocol")
-					cm.ProtocolName = "MQIsdp"
-					cm.ProtocolVersion = 3
-				default:
-					DEBUG.Println(CLI, "Using MQTT 3.1.1 protocol")
-					c.options.ProtocolVersion = 4
-					cm.ProtocolName = "MQTT"
-					cm.ProtocolVersion = 4
-				}
-				cm.Write(c.conn)
-
-				rc = c.connect()
-				if rc != packets.Accepted {
-					c.conn.Close()
-					c.conn = nil
-					//if the protocol version was explicitly set don't do any fallback
-					if c.options.protocolVersionExplicit {
-						ERROR.Println(CLI, "Connecting to", broker, "CONNACK was not CONN_ACCEPTED, but rather", packets.ConnackReturnCodes[rc])
-						continue
-					}
-					if c.options.ProtocolVersion == 4 {
-						DEBUG.Println(CLI, "Trying reconnect using MQTT 3.1 protocol")
-						c.options.ProtocolVersion = 3
-						goto CONN
-					}
-				}
-				break
-			} else {
-				ERROR.Println(CLI, err.Error())
-				WARN.Println(CLI, "failed to connect to broker, trying next")
-				rc = packets.ErrNetworkError
-			}
-		}
-
-		if c.conn == nil {
-			ERROR.Println(CLI, "Failed to connect to a broker")
-			t.returnCode = rc
-			if rc != packets.ErrNetworkError {
-				t.err = packets.ConnErrors[rc]
-			} else {
-				t.err = fmt.Errorf("%s : %s", packets.ConnErrors[rc], err)
-			}
-			t.flowComplete()
-			return
-		}
-
-		c.persist.Open()
-
-		c.obound = make(chan *PacketAndToken, c.options.MessageChannelDepth)
-		c.oboundP = make(chan *PacketAndToken, c.options.MessageChannelDepth)
-		c.ibound = make(chan packets.ControlPacket)
-		c.errors = make(chan error)
-		c.stop = make(chan struct{})
-		c.pingTimer = time.NewTimer(c.options.KeepAlive)
-		c.pingRespTimer = time.NewTimer(time.Duration(10) * time.Second)
-		c.pingRespTimer.Stop()
-
-		c.incomingPubChan = make(chan *packets.PublishPacket, c.options.MessageChannelDepth)
-		c.msgRouter.matchAndDispatch(c.incomingPubChan, c.options.Order, c)
-
-		c.workers.Add(1)
-		go outgoing(c)
-		go alllogic(c)
-
-		c.setConnected(connected)
-		DEBUG.Println(CLI, "client is connected")
-		if c.options.OnConnect != nil {
-			go c.options.OnConnect(c)
-		}
-
-		if c.options.KeepAlive != 0 {
-			c.workers.Add(1)
-			go keepalive(c)
-		}
-
-		// Take care of any messages in the store
-		//var leftovers []Receipt
-		if c.options.CleanSession == false {
-			//leftovers = c.resume()
-		} else {
-			c.persist.Reset()
-		}
-
-		// Do not start incoming until resume has completed
-		c.workers.Add(1)
-		go incoming(c)
-
-		DEBUG.Println(CLI, "exit startClient")
-		t.flowComplete()
-	}()
-	return t
-}
-
-// internal function used to reconnect the client when it loses its connection
-func (c *Client) reconnect() {
-	DEBUG.Println(CLI, "enter reconnect")
-	c.setConnected(reconnecting)
-	var rc byte = 1
-	var sleep uint = 1
-	var err error
-
-	for rc != 0 {
-		cm := newConnectMsgFromOptions(&c.options)
-
-		for _, broker := range c.options.Servers {
-		CONN:
-			DEBUG.Println(CLI, "about to write new connect msg")
-			c.conn, err = openConnection(broker, &c.options.TLSConfig, c.options.ConnectTimeout)
-			if err == nil {
-				DEBUG.Println(CLI, "socket connected to broker")
-				switch c.options.ProtocolVersion {
-				case 3:
-					DEBUG.Println(CLI, "Using MQTT 3.1 protocol")
-					cm.ProtocolName = "MQIsdp"
-					cm.ProtocolVersion = 3
-				default:
-					DEBUG.Println(CLI, "Using MQTT 3.1.1 protocol")
-					c.options.ProtocolVersion = 4
-					cm.ProtocolName = "MQTT"
-					cm.ProtocolVersion = 4
-				}
-				cm.Write(c.conn)
-
-				rc = c.connect()
-				if rc != packets.Accepted {
-					c.conn.Close()
-					c.conn = nil
-					//if the protocol version was explicitly set don't do any fallback
-					if c.options.protocolVersionExplicit {
-						ERROR.Println(CLI, "Connecting to", broker, "CONNACK was not Accepted, but rather", packets.ConnackReturnCodes[rc])
-						continue
-					}
-					if c.options.ProtocolVersion == 4 {
-						DEBUG.Println(CLI, "Trying reconnect using MQTT 3.1 protocol")
-						c.options.ProtocolVersion = 3
-						goto CONN
-					}
-				}
-				break
-			} else {
-				ERROR.Println(CLI, err.Error())
-				WARN.Println(CLI, "failed to connect to broker, trying next")
-				rc = packets.ErrNetworkError
-			}
-		}
-		if rc != 0 {
-			DEBUG.Println(CLI, "Reconnect failed, sleeping for", sleep, "seconds")
-			time.Sleep(time.Duration(sleep) * time.Second)
-			if sleep <= uint(c.options.MaxReconnectInterval.Seconds()) {
-				sleep *= 2
-			}
-		}
+	c.t = &Tracer{
+		c.options.tracelevel,
+		c.options.tracefile,
+		c.options.clientId,
 	}
 
-	c.pingTimer.Reset(c.options.KeepAlive)
+	c.options.store.SetTracer(c.t)
+
+	c.trace_v(CLI, "Start()")
+
+	c1, err1 := openConnection(c.options.server, c.options.tlsconfig)
+	if err1 != nil {
+		c.trace_w(CLI, "failed to connect to primary broker")
+		if c.options.server2 != nil {
+			c2, err2 := openConnection(c.options.server2, c.options.tlsconfig)
+			if err2 != nil {
+				c.trace_w(CLI, "failed to connect to standby broker")
+				return nil, err1
+			}
+			c.conn = c2
+			c.trace_v(CLI, "connected to standby broker")
+		} else {
+			c.trace_w(CLI, "standby broker is not configured")
+			return nil, err1
+		}
+	} else {
+		c.conn = c1
+		c.trace_v(CLI, "connected to primary broker")
+	}
+
+	if c.conn == nil {
+		c.trace_e(CLI, "Failed to connect to a broker")
+		return nil, errors.New("Failed to connect to a broker")
+	}
+	c.bufferedConn = bufio.NewReadWriter(bufio.NewReader(c.conn), bufio.NewWriter(c.conn))
+
+	c.persist.Open()
+	c.receipts = newReceiptMap()
+
+	c.trace_v(CLI, "about to start generateMsgIds")
+	c.options.mids.generateMsgIds()
+
+	c.obound = make(chan sendable)
+	c.ibound = make(chan *Message)
+	c.oboundP = make(chan *Message)
+	c.errors = make(chan error)
 	c.stop = make(chan struct{})
 
-	c.workers.Add(1)
 	go outgoing(c)
 	go alllogic(c)
 
-	c.setConnected(connected)
-	DEBUG.Println(CLI, "client is reconnected")
-	if c.options.OnConnect != nil {
-		go c.options.OnConnect(c)
+	cm := newConnectMsgFromOptions(c.options)
+	c.trace_v(CLI, "about to write new connect msg")
+	c.oboundP <- cm
+
+	rc := connect(c)
+	if rc != CONN_ACCEPTED {
+		c.trace_c(CLI, "CONNACK was not CONN_ACCEPTED, but rather %s", rc2str(rc))
+		return nil, chkrc(rc)
 	}
 
-	if c.options.KeepAlive != 0 {
-		c.workers.Add(1)
+	c.options.pubChanZero = make(chan *Message, 1000)
+	c.options.pubChanOne = make(chan *Message, 1000)
+	c.options.pubChanTwo = make(chan *Message, 1000)
+	c.options.msgRouter.matchAndDispatch(c.options.pubChanZero, c.options.order, c)
+	c.options.msgRouter.matchAndDispatch(c.options.pubChanOne, c.options.order, c)
+	c.options.msgRouter.matchAndDispatch(c.options.pubChanTwo, c.options.order, c)
+
+	c.connected = true
+	c.trace_v(CLI, "client is connected")
+
+	if c.options.timeout != 0 {
 		go keepalive(c)
 	}
-	c.workers.Add(1)
+
+	// Take care of any messages in the store
+	var leftovers []Receipt
+	if c.options.cleanses == false {
+		leftovers = c.resume()
+	} else {
+		c.persist.Reset()
+	}
+
+	// Do not start incoming until resume has completed
 	go incoming(c)
-}
 
-// This function is only used for receiving a connack
-// when the connection is first started.
-// This prevents receiving incoming data while resume
-// is in progress if clean session is false.
-func (c *Client) connect() byte {
-	DEBUG.Println(NET, "connect started")
-
-	ca, err := packets.ReadPacket(c.conn)
-	if err != nil {
-		ERROR.Println(NET, "connect got error", err)
-		return packets.ErrNetworkError
-	}
-	if ca == nil {
-		ERROR.Println(NET, "received nil packet")
-		return packets.ErrNetworkError
-	}
-
-	msg, ok := ca.(*packets.ConnackPacket)
-	if !ok {
-		ERROR.Println(NET, "received msg that was not CONNACK")
-		return packets.ErrNetworkError
-	}
-
-	DEBUG.Println(NET, "received connack")
-	return msg.ReturnCode
+	c.trace_v(CLI, "exit startMqttClient")
+	return leftovers, chkrc(rc)
 }
 
 // Disconnect will end the connection with the server, but not before waiting
 // the specified number of milliseconds to wait for existing work to be
 // completed.
-func (c *Client) Disconnect(quiesce uint) {
+func (c *MqttClient) Disconnect(quiesce uint) {
 	if !c.IsConnected() {
-		WARN.Println(CLI, "already disconnected")
+		c.trace_w(CLI, "already disconnected")
 		return
 	}
-	DEBUG.Println(CLI, "disconnecting")
-	c.setConnected(disconnected)
-
-	dm := packets.NewControlPacket(packets.Disconnect).(*packets.DisconnectPacket)
-	dt := newToken(packets.Disconnect)
-	c.oboundP <- &PacketAndToken{p: dm, t: dt}
+	c.trace_v(CLI, "disconnecting")
+	c.connected = false
 
 	// wait for work to finish, or quiesce time consumed
-	dt.WaitTimeout(time.Duration(quiesce) * time.Millisecond)
+	end := time.After(time.Duration(quiesce) * time.Millisecond)
+
+	// for now we just wait for the time specified and hope the work is done
+	select {
+	case <-end:
+		c.trace_v(CLI, "quiesce expired, forcing disconnect")
+		// case <- other:
+		// 	c.trace_v(CLI, "finished processing work, graceful disconnect")
+	}
 	c.disconnect()
 }
 
 // ForceDisconnect will end the connection with the mqtt broker immediately.
-func (c *Client) forceDisconnect() {
+func (c *MqttClient) ForceDisconnect() {
 	if !c.IsConnected() {
-		WARN.Println(CLI, "already disconnected")
+		c.trace_w(CLI, "already disconnected")
 		return
 	}
-	c.setConnected(disconnected)
-	c.conn.Close()
-	DEBUG.Println(CLI, "forcefully disconnecting")
+	c.trace_v(CLI, "forcefully disconnecting")
 	c.disconnect()
 }
 
-func (c *Client) internalConnLost(err error) {
-	close(c.stop)
-	c.conn.Close()
-	c.workers.Wait()
-	if c.IsConnected() {
-		if c.options.OnConnectionLost != nil {
-			go c.options.OnConnectionLost(c, err)
-		}
-		if c.options.AutoReconnect {
-			go c.reconnect()
-		} else {
-			c.setConnected(disconnected)
-		}
-	}
-}
+func (c *MqttClient) disconnect() {
+	c.connected = false
+	dm := newDisconnectMsg()
 
-func (c *Client) disconnect() {
-	select {
-	case <-c.stop:
-		//someone else has already closed the channel, must be error
-	default:
-		close(c.stop)
-	}
-	c.conn.Close()
-	c.workers.Wait()
-	close(c.stopRouter)
-	DEBUG.Println(CLI, "disconnected")
+	// Stop all go routines except outgoing
+	close(c.stop)
+
+	// Send disconnect message and stop outgoing
+	c.oboundP <- dm
+
+	c.trace_v(CLI, "disconnected")
 	c.persist.Close()
 }
 
-// Publish will publish a message with the specified QoS and content
-// to the specified topic.
-// Returns a token to track delivery of the message to the broker
-func (c *Client) Publish(topic string, qos byte, retained bool, payload interface{}) Token {
-	token := newToken(packets.Publish).(*PublishToken)
-	DEBUG.Println(CLI, "enter Publish")
-	switch {
-	case !c.IsConnected():
-		token.err = ErrNotConnected
-		token.flowComplete()
-		return token
-	case c.connectionStatus() == reconnecting && qos == 0:
-		token.flowComplete()
-		return token
-	}
-	pub := packets.NewControlPacket(packets.Publish).(*packets.PublishPacket)
-	pub.Qos = qos
-	pub.TopicName = topic
-	pub.Retain = retained
+// Publish will publish a message with the specified QoS
+// and content to the specified topic.
+// Returns a read only channel used to track
+// the delivery of the message.
+func (c *MqttClient) Publish(qos QoS, topic string, payload interface{}) <-chan Receipt {
+	var pub *Message
 	switch payload.(type) {
 	case string:
-		pub.Payload = []byte(payload.(string))
+		pub = newPublishMsg(qos, topic, []byte(payload.(string)))
 	case []byte:
-		pub.Payload = payload.([]byte)
+		pub = newPublishMsg(qos, topic, payload.([]byte))
 	default:
-		token.err = errors.New("Unknown payload type")
-		token.flowComplete()
-		return token
+		return nil
 	}
 
-	DEBUG.Println(CLI, "sending publish message, topic:", topic)
-	c.obound <- &PacketAndToken{p: pub, t: token}
-	return token
+	r := make(chan Receipt, 1)
+	c.trace_v(CLI, "sending publish message, topic: %s", topic)
+
+	select {
+	case c.obound <- sendable{pub, r}:
+		return r
+	case <-time.After(time.Second):
+		close(r)
+		return nil
+	}
 }
 
-// Subscribe starts a new subscription. Provide a MessageHandler to be executed when
-// a message is published on the topic provided.
-func (c *Client) Subscribe(topic string, qos byte, callback MessageHandler) Token {
-	token := newToken(packets.Subscribe).(*SubscribeToken)
-	DEBUG.Println(CLI, "enter Subscribe")
-	if !c.IsConnected() {
-		token.err = ErrNotConnected
-		token.flowComplete()
-		return token
-	}
-	sub := packets.NewControlPacket(packets.Subscribe).(*packets.SubscribePacket)
-	if err := validateTopicAndQos(topic, qos); err != nil {
-		token.err = err
-		return token
-	}
-	sub.Topics = append(sub.Topics, topic)
-	sub.Qoss = append(sub.Qoss, qos)
-	DEBUG.Println(CLI, sub.String())
+// PublishMessage will publish a Message to the specified topic.
+// Returns a read only channel used to track
+// the delivery of the message.
+func (c *MqttClient) PublishMessage(topic string, message *Message) <-chan Receipt {
+	// Just reuse pieces from the existing message
+	// so that message id etc aren't set
+	pub := newPublishMsg(message.QoS(), topic, message.payload)
+	pub.SetRetainedFlag(message.RetainedFlag())
 
-	if callback != nil {
-		c.msgRouter.addRoute(topic, callback)
-	}
+	r := make(chan Receipt, 1)
 
-	token.subs = append(token.subs, topic)
-	c.oboundP <- &PacketAndToken{p: sub, t: token}
-	DEBUG.Println(CLI, "exit Subscribe")
-	return token
+	c.trace_v(CLI, "sending publish message, topic: %s", topic)
+
+	select {
+	case c.obound <- sendable{pub, r}:
+		return r
+	case <-time.After(time.Second):
+		close(r)
+		return nil
+	}
 }
 
-// SubscribeMultiple starts a new subscription for multiple topics. Provide a MessageHandler to
-// be executed when a message is published on one of the topics provided.
-func (c *Client) SubscribeMultiple(filters map[string]byte, callback MessageHandler) Token {
-	var err error
-	token := newToken(packets.Subscribe).(*SubscribeToken)
-	DEBUG.Println(CLI, "enter SubscribeMultiple")
+// Start a new subscription. Provide a MessageHandler to be executed when
+// a message is published on one of the topics provided.
+func (c *MqttClient) StartSubscription(callback MessageHandler, filters ...*TopicFilter) (<-chan Receipt, error) {
 	if !c.IsConnected() {
-		token.err = ErrNotConnected
-		token.flowComplete()
-		return token
+		return nil, ErrNotConnected
 	}
-	sub := packets.NewControlPacket(packets.Subscribe).(*packets.SubscribePacket)
-	if sub.Topics, sub.Qoss, err = validateSubscribeMap(filters); err != nil {
-		token.err = err
-		return token
-	}
+	c.trace_v(CLI, "enter StartSubscription")
+	submsg := newSubscribeMsg(filters...)
+	chkcond(submsg != nil)
 
 	if callback != nil {
-		for topic := range filters {
-			c.msgRouter.addRoute(topic, callback)
+		for i := range filters {
+			c.options.msgRouter.addRoute(filters[i].string, callback)
 		}
 	}
-	token.subs = make([]string, len(sub.Topics))
-	copy(token.subs, sub.Topics)
-	c.oboundP <- &PacketAndToken{p: sub, t: token}
-	DEBUG.Println(CLI, "exit SubscribeMultiple")
-	return token
+
+	r := make(chan Receipt, 1)
+
+	c.obound <- sendable{submsg, r}
+
+	c.trace_v(CLI, "exit StartSubscription")
+	return r, nil
 }
 
-// Unsubscribe will end the subscription from each of the topics provided.
+// EndSubscription will end the subscription from each of the topics provided.
 // Messages published to those topics from other clients will no longer be
 // received.
-func (c *Client) Unsubscribe(topics ...string) Token {
-	token := newToken(packets.Unsubscribe).(*UnsubscribeToken)
-	DEBUG.Println(CLI, "enter Unsubscribe")
+func (c *MqttClient) EndSubscription(topics ...string) (<-chan Receipt, error) {
 	if !c.IsConnected() {
-		token.err = ErrNotConnected
-		token.flowComplete()
-		return token
+		return nil, ErrNotConnected
 	}
-	unsub := packets.NewControlPacket(packets.Unsubscribe).(*packets.UnsubscribePacket)
-	unsub.Topics = make([]string, len(topics))
-	copy(unsub.Topics, topics)
+	c.trace_v(CLI, "enter EndSubscription")
+	usmsg := newUnsubscribeMsg(topics...)
 
-	c.oboundP <- &PacketAndToken{p: unsub, t: token}
+	r := make(chan Receipt, 1)
+
+	c.obound <- sendable{usmsg, r}
 	for _, topic := range topics {
-		c.msgRouter.deleteRoute(topic)
+		c.options.msgRouter.deleteRoute(topic)
 	}
 
-	DEBUG.Println(CLI, "exit Unsubscribe")
-	return token
-}
-
-//DefaultConnectionLostHandler is a definition of a function that simply
-//reports to the DEBUG log the reason for the client losing a connection.
-func DefaultConnectionLostHandler(client *Client, reason error) {
-	DEBUG.Println("Connection lost:", reason.Error())
+	c.trace_v(CLI, "exit EndSubscription")
+	return r, nil
 }
