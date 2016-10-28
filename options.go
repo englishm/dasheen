@@ -17,125 +17,126 @@ package mqtt
 import (
 	"crypto/tls"
 	"net/url"
-	"time"
+	"os"
 )
 
 // MessageHandler is a callback type which can be set to be
 // executed upon the arrival of messages published to topics
 // to which the client is subscribed.
-type MessageHandler func(*Client, Message)
+type MessageHandler func(client *MqttClient, message Message)
 
-// ConnectionLostHandler is a callback type which can be set to be
+// OnConnectionLost is a callback type which can be set to be
 // executed upon an unintended disconnection from the MQTT broker.
 // Disconnects caused by calling Disconnect or ForceDisconnect will
 // not cause an OnConnectionLost callback to execute.
-type ConnectionLostHandler func(*Client, error)
+type OnConnectionLost func(client *MqttClient, reason error)
 
-// OnConnectHandler is a callback that is called when the client
-// state changes from unconnected/disconnected to connected. Both
-// at initial connection and on reconnection
-type OnConnectHandler func(*Client)
-
-// ClientOptions contains configurable options for an Client.
+// ClientOptions contains configurable options for an MqttClient.
 type ClientOptions struct {
-	Servers                 []*url.URL
-	ClientID                string
-	Username                string
-	Password                string
-	CleanSession            bool
-	Order                   bool
-	WillEnabled             bool
-	WillTopic               string
-	WillPayload             []byte
-	WillQos                 byte
-	WillRetained            bool
-	ProtocolVersion         uint
-	protocolVersionExplicit bool
-	TLSConfig               tls.Config
-	KeepAlive               time.Duration
-	PingTimeout             time.Duration
-	ConnectTimeout          time.Duration
-	MaxReconnectInterval    time.Duration
-	AutoReconnect           bool
-	Store                   Store
-	DefaultPublishHander    MessageHandler
-	OnConnect               OnConnectHandler
-	OnConnectionLost        ConnectionLostHandler
-	WriteTimeout            time.Duration
-	MessageChannelDepth     uint
+	server        *url.URL
+	server2       *url.URL
+	clientId      string
+	username      string
+	password      string
+	cleanses      bool
+	order         bool
+	will_enabled  bool
+	will_topic    string
+	will_payload  []byte
+	will_qos      QoS
+	will_retained bool
+	maxinflight   uint
+	tlsconfig     *tls.Config
+	timeout       uint
+	store         Store
+	tracefile     *os.File
+	tracelevel    tracelevel
+	msgRouter     *router
+	stopRouter    chan bool
+	pubChanZero   chan *Message
+	pubChanOne    chan *Message
+	pubChanTwo    chan *Message
+	onconnlost    OnConnectionLost
+	mids          messageIds
 }
 
-// NewClientOptions will create a new ClientClientOptions type with some
+// NewClientClientOptions will create a new ClientClientOptions type with some
 // default values.
 //   Port: 1883
 //   CleanSession: True
-//   Order: True
-//   KeepAlive: 30 (seconds)
-//   ConnectTimeout: 30 (seconds)
-//   MaxReconnectInterval 10 (minutes)
-//   AutoReconnect: True
+//   Timeout: 30 (seconds)
+//   Tracefile: os.Stdout
 func NewClientOptions() *ClientOptions {
 	o := &ClientOptions{
-		Servers:                 nil,
-		ClientID:                "",
-		Username:                "",
-		Password:                "",
-		CleanSession:            true,
-		Order:                   true,
-		WillEnabled:             false,
-		WillTopic:               "",
-		WillPayload:             nil,
-		WillQos:                 0,
-		WillRetained:            false,
-		ProtocolVersion:         0,
-		protocolVersionExplicit: false,
-		TLSConfig:               tls.Config{},
-		KeepAlive:               30 * time.Second,
-		PingTimeout:             10 * time.Second,
-		ConnectTimeout:          30 * time.Second,
-		MaxReconnectInterval:    10 * time.Minute,
-		AutoReconnect:           true,
-		Store:                   nil,
-		OnConnect:               nil,
-		OnConnectionLost:        DefaultConnectionLostHandler,
-		WriteTimeout:            0, // 0 represents timeout disabled
-		MessageChannelDepth:     100,
+		server:        nil,
+		server2:       nil,
+		clientId:      "",
+		username:      "",
+		password:      "",
+		cleanses:      true,
+		order:         true,
+		will_enabled:  false,
+		will_topic:    "",
+		will_payload:  nil,
+		will_qos:      QOS_ZERO,
+		will_retained: false,
+		maxinflight:   10,
+		tlsconfig:     nil,
+		store:         nil,
+		timeout:       30,
+		tracefile:     os.Stdout,
+		tracelevel:    Verbose,
+		pubChanZero:   nil,
+		pubChanOne:    nil,
+		pubChanTwo:    nil,
+		onconnlost:    DefaultErrorHandler,
+		mids:          messageIds{index: make(map[MId]bool)},
 	}
+	o.msgRouter, o.stopRouter = newRouter()
 	return o
 }
 
-// AddBroker adds a broker URI to the list of brokers to be used. The format should be
+// SetBroker will allow you to set the URI for your broker. The format should be
 // scheme://host:port
 // Where "scheme" is one of "tcp", "ssl", or "ws", "host" is the ip-address (or hostname)
 // and "port" is the port on which the broker is accepting connections.
-func (o *ClientOptions) AddBroker(server string) *ClientOptions {
-	brokerURI, _ := url.Parse(server)
-	o.Servers = append(o.Servers, brokerURI)
-	return o
+// For example, one could connect to tcp://test.mosquitto.org:1883
+func (opts *ClientOptions) SetBroker(server string) *ClientOptions {
+	opts.server, _ = url.Parse(server)
+	return opts
 }
 
-// SetClientID will set the client id to be used by this client when
+// SetStandbyBroker will allow you to set a second URI to which the client will attempt
+// to connect in the event of a connection failure. This is for use only in cases where
+// two brokers are configured as a highly available pair. (For example, two IBM MessageSight
+// appliances configured in High Availability mode).
+func (opts *ClientOptions) SetStandbyBroker(server string) *ClientOptions {
+	opts.server2, _ = url.Parse(server)
+	return opts
+}
+
+// SetClientId will set the client id to be used by this client when
 // connecting to the MQTT broker. According to the MQTT v3.1 specification,
 // a client id mus be no longer than 23 characters.
-func (o *ClientOptions) SetClientID(id string) *ClientOptions {
-	o.ClientID = id
-	return o
+func (opts *ClientOptions) SetClientId(clientid string) *ClientOptions {
+	opts.clientId = clientid
+	return opts
 }
 
 // SetUsername will set the username to be used by this client when connecting
 // to the MQTT broker. Note: without the use of SSL/TLS, this information will
 // be sent in plaintext accross the wire.
-func (o *ClientOptions) SetUsername(u string) *ClientOptions {
-	o.Username = u
-	return o
+func (opts *ClientOptions) SetUsername(username string) *ClientOptions {
+	opts.username = username
+	return opts
 }
 
 // SetPassword will set the password to be used by this client when connecting
 // to the MQTT broker. Note: without the use of SSL/TLS, this information will
 // be sent in plaintext accross the wire.
-func (o *ClientOptions) SetPassword(p string) *ClientOptions {
-	o.Password = p
-	return o
+func (opts *ClientOptions) SetPassword(password string) *ClientOptions {
+	opts.password = password
+	return opts
 }
 
 // SetCleanSession will set the "clean session" flag in the connect message
@@ -144,148 +145,108 @@ func (o *ClientOptions) SetPassword(p string) *ClientOptions {
 // delivered. Any messages that were going to be sent by this client before
 // diconnecting previously but didn't will not be sent upon connecting to the
 // broker.
-func (o *ClientOptions) SetCleanSession(clean bool) *ClientOptions {
-	o.CleanSession = clean
-	return o
+func (opts *ClientOptions) SetCleanSession(clean bool) *ClientOptions {
+	opts.cleanses = clean
+	return opts
 }
 
 // SetOrderMatters will set the message routing to guarantee order within
 // each QoS level. By default, this value is true. If set to false,
 // this flag indicates that messages can be delivered asynchronously
 // from the client to the application and possibly arrive out of order.
-func (o *ClientOptions) SetOrderMatters(order bool) *ClientOptions {
-	o.Order = order
-	return o
+func (opts *ClientOptions) SetOrderMatters(order bool) *ClientOptions {
+	opts.order = order
+	return opts
 }
 
-// SetTLSConfig will set an SSL/TLS configuration to be used when connecting
+// SetMaxInFlight will set a limit on the maximum number of "in-flight" messages
+// going from the client to the server. This setting is currently ignored.
+// func (opts *ClientOptions) SetMaxInFlight(max uint) *ClientOptions {
+// 	opts.maxinflight = max
+// 	return opts
+// }
+
+// SetTlsConfig will set an SSL/TLS configuration to be used when connecting
 // to an MQTT broker. Please read the official Go documentation for more
 // information.
-func (o *ClientOptions) SetTLSConfig(t *tls.Config) *ClientOptions {
-	o.TLSConfig = *t
-	return o
+func (opts *ClientOptions) SetTlsConfig(tlsconfig *tls.Config) *ClientOptions {
+	opts.tlsconfig = tlsconfig
+	return opts
 }
 
 // SetStore will set the implementation of the Store interface
 // used to provide message persistence in cases where QoS levels
 // QoS_ONE or QoS_TWO are used. If no store is provided, then the
 // client will use MemoryStore by default.
-func (o *ClientOptions) SetStore(s Store) *ClientOptions {
-	o.Store = s
-	return o
+func (opts *ClientOptions) SetStore(store Store) *ClientOptions {
+	opts.store = store
+	return opts
 }
 
-// SetKeepAlive will set the amount of time (in seconds) that the client
+// SetTimeout will set the amount of time (in seconds) that the client
 // should wait before sending a PING request to the broker. This will
 // allow the client to know that a connection has not been lost with the
 // server.
-func (o *ClientOptions) SetKeepAlive(k time.Duration) *ClientOptions {
-	o.KeepAlive = k
-	return o
-}
-
-// SetPingTimeout will set the amount of time (in seconds) that the client
-// will wait after sending a PING request to the broker, before deciding
-// that the connection has been lost. Default is 10 seconds.
-func (o *ClientOptions) SetPingTimeout(k time.Duration) *ClientOptions {
-	o.PingTimeout = k
-	return o
-}
-
-// SetProtocolVersion sets the MQTT version to be used to connect to the
-// broker. Legitimate values are currently 3 - MQTT 3.1 or 4 - MQTT 3.1.1
-func (o *ClientOptions) SetProtocolVersion(pv uint) *ClientOptions {
-	if pv >= 3 && pv <= 4 {
-		o.ProtocolVersion = pv
-		o.protocolVersionExplicit = true
-	}
-	return o
+func (opts *ClientOptions) SetTimeout(timeout uint) *ClientOptions {
+	opts.timeout = timeout
+	return opts
 }
 
 // UnsetWill will cause any set will message to be disregarded.
-func (o *ClientOptions) UnsetWill() *ClientOptions {
-	o.WillEnabled = false
-	return o
+func (opts *ClientOptions) UnsetWill() *ClientOptions {
+	opts.will_enabled = false
+	return opts
 }
 
 // SetWill accepts a string will message to be set. When the client connects,
 // it will give this will message to the broker, which will then publish the
 // provided payload (the will) to any clients that are subscribed to the provided
 // topic.
-func (o *ClientOptions) SetWill(topic string, payload string, qos byte, retained bool) *ClientOptions {
-	o.SetBinaryWill(topic, []byte(payload), qos, retained)
-	return o
+func (opts *ClientOptions) SetWill(topic string, payload string, qos QoS, retained bool) *ClientOptions {
+	opts.SetBinaryWill(topic, []byte(payload), qos, retained)
+	return opts
 }
 
 // SetBinaryWill accepts a []byte will message to be set. When the client connects,
 // it will give this will message to the broker, which will then publish the
 // provided payload (the will) to any clients that are subscribed to the provided
 // topic.
-func (o *ClientOptions) SetBinaryWill(topic string, payload []byte, qos byte, retained bool) *ClientOptions {
-	o.WillEnabled = true
-	o.WillTopic = topic
-	o.WillPayload = payload
-	o.WillQos = qos
-	o.WillRetained = retained
-	return o
+func (opts *ClientOptions) SetBinaryWill(topic string, payload []byte, qos QoS, retained bool) *ClientOptions {
+	opts.will_enabled = true
+	opts.will_topic = topic
+	opts.will_payload = payload
+	opts.will_qos = qos
+	opts.will_retained = retained
+	return opts
 }
 
-// SetDefaultPublishHandler sets the MessageHandler that will be called when a message
-// is received that does not match any known subscriptions.
-func (o *ClientOptions) SetDefaultPublishHandler(defaultHandler MessageHandler) *ClientOptions {
-	o.DefaultPublishHander = defaultHandler
-	return o
+// SetTracefile will set the output for any trace statements that are generated
+// by the client. By default, trace statements will be directed to os.Stdout.
+func (opts *ClientOptions) SetTracefile(tracefile *os.File) *ClientOptions {
+	opts.tracefile = tracefile
+	return opts
 }
 
-// SetOnConnectHandler sets the function to be called when the client is connected. Both
-// at initial connection time and upon automatic reconnect.
-func (o *ClientOptions) SetOnConnectHandler(onConn OnConnectHandler) *ClientOptions {
-	o.OnConnect = onConn
-	return o
+// SetTraceLevel will set the trace level (verbosity) of the client.
+// Options are:
+//   Off
+//   Critical
+//   Warn
+//   Verbose
+func (opts *ClientOptions) SetTraceLevel(level tracelevel) *ClientOptions {
+	opts.tracelevel = level
+	return opts
 }
 
-// SetConnectionLostHandler will set the OnConnectionLost callback to be executed
+// SetDefaultPublishHandler
+func (opts *ClientOptions) SetDefaultPublishHandler(defaultHandler MessageHandler) *ClientOptions {
+	opts.msgRouter.setDefaultHandler(defaultHandler)
+	return opts
+}
+
+// SetOnConnectionLost will set the OnConnectionLost callback to be executed
 // in the case where the client unexpectedly loses connection with the MQTT broker.
-func (o *ClientOptions) SetConnectionLostHandler(onLost ConnectionLostHandler) *ClientOptions {
-	o.OnConnectionLost = onLost
-	return o
-}
-
-// SetWriteTimeout puts a limit on how long a mqtt publish should block until it unblocks with a
-// timeout error. A duration of 0 never times out. Default 30 seconds
-func (o *ClientOptions) SetWriteTimeout(t time.Duration) *ClientOptions {
-	o.WriteTimeout = t
-	return o
-}
-
-// SetConnectTimeout limits how long the client will wait when trying to open a connection
-// to an MQTT server before timeing out and erroring the attempt. A duration of 0 never times out.
-// Default 30 seconds. Currently only operational on TCP/TLS connections.
-func (o *ClientOptions) SetConnectTimeout(t time.Duration) *ClientOptions {
-	o.ConnectTimeout = t
-	return o
-}
-
-// SetMaxReconnectInterval sets the maximum time that will be waited between reconnection attempts
-// when connection is lost
-func (o *ClientOptions) SetMaxReconnectInterval(t time.Duration) *ClientOptions {
-	o.MaxReconnectInterval = t
-	return o
-}
-
-// SetAutoReconnect sets whether the automatic reconnection logic should be used
-// when the connection is lost, even if disabled the ConnectionLostHandler is still
-// called
-func (o *ClientOptions) SetAutoReconnect(a bool) *ClientOptions {
-	o.AutoReconnect = a
-	return o
-}
-
-// SetMessageChannelDepth sets the size of the internal queue that holds messages while the
-// client is temporairily offline, allowing the application to publish when the client is
-// reconnecting. This setting is only valid if AutoReconnect is set to true, it is otherwise
-// ignored.
-func (o *ClientOptions) SetMessageChannelDepth(s uint) *ClientOptions {
-	o.MessageChannelDepth = s
-	return o
+func (opts *ClientOptions) SetOnConnectionLost(onLost OnConnectionLost) *ClientOptions {
+	opts.onconnlost = onLost
+	return opts
 }

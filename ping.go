@@ -15,33 +15,57 @@
 package mqtt
 
 import (
-	"errors"
-
-	"git.eclipse.org/gitroot/paho/org.eclipse.paho.mqtt.golang.git/packets"
+	"sync"
+	"time"
 )
 
-func keepalive(c *Client) {
-	DEBUG.Println(PNG, "keepalive starting")
+type lastcontact struct {
+	sync.Mutex
+	lasttime time.Time
+}
+
+func (l *lastcontact) update() {
+	l.Lock()
+	defer l.Unlock()
+	l.lasttime = time.Now()
+
+}
+
+func (l *lastcontact) get() time.Time {
+	l.Lock()
+	defer l.Unlock()
+	return l.lasttime
+}
+
+func newPingReqMsg() *Message {
+	m := newMsg(PINGREQ, false, QOS_ZERO, false)
+	m.remlen = uint32(0)
+	return m
+}
+
+func keepalive(c *MqttClient) {
+	c.trace_v(PNG, "keepalive starting")
 
 	for {
 		select {
 		case <-c.stop:
-			DEBUG.Println(PNG, "keepalive stopped")
-			c.workers.Done()
+			c.trace_w(PNG, "keepalive stopped")
 			return
-		case <-c.pingTimer.C:
-			DEBUG.Println(PNG, "keepalive sending ping")
-			ping := packets.NewControlPacket(packets.Pingreq).(*packets.PingreqPacket)
-			//We don't want to wait behind large messages being sent, the Write call
-			//will block until it it able to send the packet.
-			ping.Write(c.conn)
-			c.pingRespTimer.Reset(c.options.PingTimeout)
-		case <-c.pingRespTimer.C:
-			CRITICAL.Println(PNG, "pingresp not received, disconnecting")
-			c.workers.Done()
-			c.internalConnLost(errors.New("pingresp not received, disconnecting"))
-			c.pingTimer.Stop()
-			return
+		default:
+			last := uint(time.Since(c.lastContact.get()).Seconds())
+			//c.trace_v(PNG, "last contact: %d (timeout: %d)", last, c.options.timeout)
+			if last > c.options.timeout {
+				if !c.pingOutstanding {
+					c.trace_v(PNG, "keepalive sending ping")
+					ping := newPingReqMsg()
+					c.oboundP <- ping
+					c.pingOutstanding = true
+				} else {
+					c.trace_c(PNG, "pingresp not received, disconnecting")
+					c.disconnect()
+				}
+			}
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
